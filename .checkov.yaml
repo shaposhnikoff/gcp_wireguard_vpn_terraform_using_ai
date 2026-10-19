@@ -1,0 +1,17 @@
+# Checkov configuration.
+#
+# The scan is blocking in CI. Do not add a skip without a written reason in
+# the pull request: each exception is a deliberate risk decision.
+framework:
+  - terraform
+
+skip-check:
+  # Public IP is the WireGuard endpoint and the only SSH entry point. The
+  # address is static, protected by firewall rules and OS Login.
+  - CKV_GCP_40
+  # CSEK is deprecated by Google Cloud. Disks use Google-managed encryption
+  # at rest; customer-supplied keys are out of scope for this gateway.
+  - CKV_GCP_38
+
+compact: true
+quiet: true

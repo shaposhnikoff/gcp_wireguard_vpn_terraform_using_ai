@@ -38,7 +38,7 @@
 | Схема и ссылки | `terraform validate` | merge |
 | Провайдер-специфичные ошибки | `tflint --recursive` | merge |
 | Поведение модуля | `terraform test` | merge |
-| Политики безопасности | `checkov`, `trivy config`, `gitleaks` | merge при high/critical |
+| Политики безопасности | `checkov`, `trivy config`, `gitleaks` | merge при high/critical, кроме документированных исключений |
 | Изменения в облаке | `terraform plan -out=tfplan` | apply |
 | Стоимость | `infracost diff` | порог бюджета |
 

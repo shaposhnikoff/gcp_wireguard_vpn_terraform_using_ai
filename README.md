@@ -147,14 +147,36 @@ push в `main` и вручную через `workflow_dispatch`:
 | `fmt` | `terraform fmt -check -recursive -diff` |
 | `validate-and-test` | `init -backend=false`, `validate`, `terraform test` на Terraform 1.9.8 и 1.15.6 |
 | `tflint` | `tflint --init` + `tflint --recursive` с Google ruleset 0.40.0 |
-| `security` | Checkov, informational: `soft_fail: true` |
+| `security` | Checkov, **блокирующий**; исключения описаны в `.checkov.yaml` |
 
 GCP-креды и секреты не нужны: тесты используют `mock_provider`, `plan` и
 `apply` в CI не выполняются. Это осознанно: план требует реального проекта и
 ревью человеком.
 
-Чтобы сделать Checkov блокирующим, уберите `continue-on-error` и
-`soft_fail` после того, как разберёте текущие findings.
+## Checkov: блокирующая проверка и исключения
+
+`security` — обязательный job. Любая новая находка Checkov валит PR. Два
+правила исключены в `.checkov.yaml`, и каждое исключение — осознанное решение:
+
+| Правило | Почему исключено |
+|---|---|
+| `CKV_GCP_40` | Публичный IP — это и есть endpoint WireGuard и единственная точка входа SSH. Адрес статический, доступ ограничен firewall и OS Login. Убрать IP = убрать VPN. |
+| `CKV_GCP_38` | CSEK признан Google устаревшим. Диски шифруются Google-managed ключами; customer-supplied keys в задачу не входили. |
+
+Правила работы с исключениями:
+
+1. Новый `skip-check` добавляется только вместе с причиной в этом файле и в
+   описании PR.
+2. Точечное исключение предпочтительнее baseline: baseline скрывает находку,
+   но не объясняет решение.
+3. Если находка реальная, исправляется конфигурация, а не сканер.
+4. Локальный прогон:
+
+```bash
+uv run --with 'checkov>=3,<4' checkov -d . --config-file .checkov.yaml
+```
+
+Ожидаемый результат: `Failed checks: 0`.
 
 ## Agentic workflow
 

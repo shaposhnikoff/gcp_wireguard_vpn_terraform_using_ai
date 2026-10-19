@@ -91,10 +91,9 @@ jobs:
         run: tflint --recursive --format compact
 
   security:
-    name: Security scan (informational)
+    name: Security scan (Checkov)
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    continue-on-error: true
 
     steps:
       - name: Checkout
@@ -105,6 +104,5 @@ jobs:
         with:
           directory: .
           framework: terraform
+          config_file: .checkov.yaml
           output_format: cli
-          soft_fail: true
-          quiet: true
