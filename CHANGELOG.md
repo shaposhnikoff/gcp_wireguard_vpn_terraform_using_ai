@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 The current version lives in `VERSION` and is bumped by one patch for every
 merged pull request.
 
+## [0.0.6] - 2026-10-19
+
+### Added
+
+- CI status, release and Terraform version badges on the README landing page.
+
 ## [0.0.5] - 2026-10-19
 
 ### Changed
