@@ -1,5 +1,9 @@
 # WireGuard VPN gateway в Google Cloud
 
+[![Terraform CI](https://github.com/shaposhnikoff/gcp_wireguard_vpn_terraform_using_ai/actions/workflows/terraform.yml/badge.svg?branch=main)](https://github.com/shaposhnikoff/gcp_wireguard_vpn_terraform_using_ai/actions/workflows/terraform.yml)
+[![Release](https://img.shields.io/github/v/release/shaposhnikoff/gcp_wireguard_vpn_terraform_using_ai)](https://github.com/shaposhnikoff/gcp_wireguard_vpn_terraform_using_ai/releases)
+[![Terraform](https://img.shields.io/badge/terraform-%3E%3D1.9-7B42BC?logo=terraform)](https://developer.hashicorp.com/terraform)
+
 Terraform-модуль, который поднимает в GCP виртуальную машину с WireGuard и
 закрывает SSH доступом только с разрешённых CIDR. Проект собран как пример
 agentic-разработки: инфраструктура описывается кодом, а каждое изменение
