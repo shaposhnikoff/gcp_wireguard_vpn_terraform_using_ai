@@ -148,10 +148,30 @@ push в `main` и вручную через `workflow_dispatch`:
 | `validate-and-test` | `init -backend=false`, `validate`, `terraform test` на Terraform 1.9.8 и 1.15.6 |
 | `tflint` | `tflint --init` + `tflint --recursive` с Google ruleset 0.40.0 |
 | `security` | Checkov, **блокирующий**; исключения описаны в `.checkov.yaml` |
+| `report` | Финальный Job Summary со статусом всех gate'ов и счётчиками тестов |
 
 GCP-креды и секреты не нужны: тесты используют `mock_provider`, `plan` и
 `apply` в CI не выполняются. Это осознанно: план требует реального проекта и
 ревью человеком.
+
+### Отчёт по каждому запуску
+
+Job `report` запускается всегда (`if: always()`), даже если предыдущие gate'ы
+упали, и пишет Markdown-отчёт в GitHub Job Summary — он виден на странице
+запуска: **Actions → нужный run → Summary**.
+
+Что в отчёте:
+
+- общий вердикт: все gate'ы прошли или что-то упало;
+- таблица по каждому gate'у: Format, тесты на Terraform 1.9.8 и 1.15.6,
+  TFLint, Checkov;
+- фактический результат тестов из логов, например `Success! 4 passed, 0 failed`;
+- commit, ref, событие, автор и ссылка на запуск.
+
+Логи тестов загружаются артефактами `terraform-test-*` с retention 3 дня,
+поэтому отчёт показывает результат, даже если job с тестами упал. Сам отчёт
+не блокирует merge: он только агрегирует статусы, решение принимается по
+красным/зелёным job'ам выше.
 
 ## Checkov: блокирующая проверка и исключения
 

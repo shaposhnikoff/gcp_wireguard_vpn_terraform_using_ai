@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: terraform-${{ github.workflow }}-${{ github.ref }}
@@ -65,7 +66,16 @@ jobs:
         run: terraform validate
 
       - name: Run Terraform tests
-        run: terraform test
+        run: terraform test -no-color 2>&1 | tee "tf-test-${{ matrix.terraform }}.log"
+
+      - name: Upload test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-test-${{ matrix.terraform }}
+          path: tf-test-${{ matrix.terraform }}.log
+          retention-days: 3
+          if-no-files-found: ignore
 
   tflint:
     name: TFLint
@@ -106,3 +116,104 @@ jobs:
           framework: terraform
           config_file: .checkov.yaml
           output_format: cli
+
+  report:
+    name: Verification report
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: always()
+    needs:
+      - fmt
+      - validate-and-test
+      - tflint
+      - security
+
+    steps:
+      - name: Download test logs
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          pattern: terraform-test-*
+          path: artifacts
+          merge-multiple: true
+
+      - name: Render summary
+        shell: bash
+        env:
+          FMT_RESULT: ${{ needs.fmt.result }}
+          TEST_RESULT: ${{ needs.validate-and-test.result }}
+          TFLINT_RESULT: ${{ needs.tflint.result }}
+          CHECKOV_RESULT: ${{ needs.security.result }}
+        run: |
+          set -euo pipefail
+
+          icon() {
+            case "$1" in
+              success) printf '✅' ;;
+              failure) printf '❌' ;;
+              cancelled) printf '⏹️' ;;
+              skipped) printf '⏭️' ;;
+              *) printf '⚠️' ;;
+            esac
+          }
+
+          test_line() {
+            local log="artifacts/tf-test-$1.log"
+            local summary=""
+            if [[ -f "$log" ]]; then
+              summary="$(grep -Eo 'Success! [0-9]+ passed, [0-9]+ failed|Failure! [0-9]+ passed, [0-9]+ failed, [0-9]+ skipped' "$log" | tail -1 || true)"
+            fi
+            if [[ -n "$summary" ]]; then
+              printf '%s' "$summary"
+            else
+              printf 'log unavailable'
+            fi
+          }
+
+          test_state() {
+            local log="artifacts/tf-test-$1.log"
+            if [[ -f "$log" ]]; then
+              if grep -q '^Failure!' "$log"; then
+                printf 'failure'
+                return
+              fi
+              if grep -q '^Success!' "$log"; then
+                printf 'success'
+                return
+              fi
+            fi
+            printf 'unknown'
+          }
+
+          TEST_198="$(test_line 1.9.8)"
+          TEST_115="$(test_line 1.15.6)"
+          TEST_198_STATE="$(test_state 1.9.8)"
+          TEST_115_STATE="$(test_state 1.15.6)"
+
+          if [[ "$FMT_RESULT" == "success" && "$TEST_RESULT" == "success" && "$TFLINT_RESULT" == "success" && "$CHECKOV_RESULT" == "success" ]]; then
+            OVERALL="$(printf '### ✅ All Terraform gates passed\n\nThe change is ready for review. No plan or apply was executed by CI.')"
+          else
+            OVERALL="$(printf '### ❌ Verification failed\n\nAt least one gate failed. Open the failing job below for details.')"
+          fi
+
+          {
+            echo "## Terraform verification report"
+            echo
+            echo "$OVERALL"
+            echo
+            echo "| Gate | Result | Details |"
+            echo "|:--|:--:|:--|"
+            echo "| Format | $(icon "$FMT_RESULT") ${FMT_RESULT} | \`terraform fmt -check\` |"
+            echo "| Tests on Terraform 1.9.8 | $(icon "$TEST_198_STATE") ${TEST_198_STATE} | ${TEST_198} |"
+            echo "| Tests on Terraform 1.15.6 | $(icon "$TEST_115_STATE") ${TEST_115_STATE} | ${TEST_115} |"
+            echo "| TFLint | $(icon "$TFLINT_RESULT") ${TFLINT_RESULT} | Google ruleset 0.40.0 |"
+            echo "| Checkov | $(icon "$CHECKOV_RESULT") ${CHECKOV_RESULT} | Exceptions in \`.checkov.yaml\` |"
+            echo
+            echo "**Commit:** \`${GITHUB_SHA::7}\` · **Ref:** \`${GITHUB_REF_NAME}\` · **Event:** \`${GITHUB_EVENT_NAME}\` · **Actor:** @${GITHUB_ACTOR}"
+            echo
+            echo "[Open workflow run](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})"
+            echo
+            echo "_CI checks formatting, schema, mocked Terraform tests, linting and security. Plan and apply stay manual._"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          cat "$GITHUB_STEP_SUMMARY"
