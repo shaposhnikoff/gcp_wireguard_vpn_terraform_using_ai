@@ -219,8 +219,10 @@ Job `report` запускается всегда (`if: always()`), даже ес
   TFLint, Checkov;
 - фактический результат тестов из логов, например `Success! 4 passed, 0 failed`;
 - сводка плана, например `Plan: 13 to add, 0 to change, 0 to destroy`;
-- diff против `main` и предыдущего запуска: `4 added, 2 removed`, `no base plan`
-  или `no previous plan`;
+- diff против `main` и предыдущего запуска: `4 added, 2 removed`,
+  `no comparison plan` или `no previous plan`;
+- внизу отчёта — раскрывающийся блок с самим unified diff (до 30 000 символов),
+  ниже таблицы проверок и выше строки с commit.
 - commit, ref, событие, автор и ссылка на запуск.
 
 Логи тестов и план загружаются артефактами `terraform-test-*` и

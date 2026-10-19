@@ -484,6 +484,37 @@ jobs:
             PLAN_BASE_DIFF="$(tr -d '\n' < plan-artifacts/plan-base-diff-stat.txt)"
           fi
 
+          render_diff() {
+            local file="$1"
+            local title="$2"
+            local bytes
+
+            [[ -f "$file" ]] || return 0
+
+            echo "<details><summary>${title}</summary>"
+            echo
+
+            if [[ -s "$file" ]]; then
+              bytes="$(wc -c < "$file" | tr -d ' ')"
+              echo '```diff'
+              if (( bytes > 30000 )); then
+                head -c 30000 "$file"
+                echo
+                echo "... diff truncated ..."
+              else
+                cat "$file"
+              fi
+              echo
+              echo '```'
+            else
+              echo "No infrastructure changes."
+            fi
+
+            echo
+            echo "</details>"
+            echo
+          }
+
           VERSION_VALUE="$(tr -d '[:space:]' < VERSION)"
 
           if [[ "$FMT_RESULT" == "success" && "$VERSION_RESULT" == "success" && "$PLAN_RESULT" == "success" && "$TEST_RESULT" == "success" && "$TFLINT_RESULT" == "success" && "$CHECKOV_RESULT" == "success" ]]; then
@@ -509,6 +540,10 @@ jobs:
             echo "| TFLint | $(icon "$TFLINT_RESULT") ${TFLINT_RESULT} | Google ruleset 0.40.0 |"
             echo "| Checkov | $(icon "$CHECKOV_RESULT") ${CHECKOV_RESULT} | Exceptions in \`.checkov.yaml\` |"
             echo
+            render_diff "plan-artifacts/plan-base.diff" "Plan diff vs ${PLAN_BASE_LABEL}"
+            if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+              render_diff "plan-artifacts/plan.diff" "Plan diff vs previous PR push"
+            fi
             echo "**Commit:** \`${GITHUB_SHA::7}\` · **Ref:** \`${GITHUB_REF_NAME}\` · **Event:** \`${GITHUB_EVENT_NAME}\` · **Actor:** @${GITHUB_ACTOR}"
             echo
             echo "[Open workflow run](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})"
