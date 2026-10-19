@@ -19,3 +19,5 @@ backend.tf
 
 .env
 .DS_Store
+
+site/
