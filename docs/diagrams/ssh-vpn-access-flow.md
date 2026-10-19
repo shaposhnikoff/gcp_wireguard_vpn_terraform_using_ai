@@ -8,11 +8,14 @@ CIDR, клиентский трафик — по UDP, всё остальное 
 ```mermaid
 flowchart TD
     Admin["Admin workstation<br/>allowed SSH CIDR"] -->|"TCP 22"| FWSSH["Firewall allow-ssh<br/>priority 1000<br/>logging on"]
+    Admin -->|"ICMP"| FWICMP["Firewall allow-icmp<br/>priority 1000"]
     Client["WireGuard client<br/>10.66.66.0/24"] -->|"UDP 51820"| FWVPN["Firewall allow-wireguard<br/>priority 1000"]
     FWSSH --> VM["GCE VM vpn-gw-vm<br/>OS Login only<br/>Shielded VM"]
+    FWICMP --> VM
     FWVPN --> VM
     VM -->|"MASQUERADE"| Egress["Internet egress"]
     FWSSH --> Deny["Firewall deny-all-ingress<br/>priority 65534"]
+    FWICMP --> Deny
     FWVPN --> Deny
     Deny --> Drop["Dropped"]
 ```
@@ -43,7 +46,8 @@ sequenceDiagram
 
 ## Правила, которые видны на схеме
 
-- SSH и WireGuard — единственные ingress-правила с priority 1000.
+- SSH и WireGuard — единственные ingress-правила с priority 1000, плюс
+  ICMP-диагностика с тех же административных диапазонов.
 - Явный deny на priority 65534 делает отказ видимым в логах.
 - У VM нет project-wide SSH keys: доступ только через OS Login.
 - Клиентские приватные ключи не проходят через Terraform.

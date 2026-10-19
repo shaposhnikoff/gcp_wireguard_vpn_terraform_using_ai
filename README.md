@@ -128,6 +128,7 @@ output`.
 ## Безопасность
 
 - SSH только с явного allowlist; `0.0.0.0/0` запрещён validation.
+- ICMP (ping/traceroute) разрешён только с тех же административных диапазонов.
 - OS Login, `block-project-ssh-keys=TRUE`, serial console выключена.
 - Shielded VM: Secure Boot, vTPM, integrity monitoring.
 - VM работает под отдельным SA; project-level роли — только
