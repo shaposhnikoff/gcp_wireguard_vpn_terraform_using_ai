@@ -37,6 +37,26 @@ resource "google_compute_firewall" "icmp_diagnostics" {
   }
 }
 
+resource "google_compute_firewall" "http_https" {
+  name        = "${var.name_prefix}-allow-http-https"
+  network     = google_compute_network.vpn.name
+  direction   = "INGRESS"
+  priority    = 1000
+  description = "Experimental: expose TCP 80 and 443 to VPN client ranges. Do not merge."
+
+  source_ranges = var.vpn_allowed_cidrs
+  target_tags   = [var.instance_tag]
+
+  allow {
+    protocol = "tcp"
+    ports    = ["80", "443"]
+  }
+
+  log_config {
+    metadata = "EXCLUDE_ALL_METADATA"
+  }
+}
+
 resource "google_compute_firewall" "wireguard" {
   name        = "${var.name_prefix}-allow-wireguard"
   network     = google_compute_network.vpn.name
