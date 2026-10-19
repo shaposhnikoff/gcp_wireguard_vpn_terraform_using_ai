@@ -18,6 +18,25 @@ resource "google_compute_firewall" "ssh" {
   }
 }
 
+resource "google_compute_firewall" "icmp_diagnostics" {
+  name        = "${var.name_prefix}-allow-icmp"
+  network     = google_compute_network.vpn.name
+  direction   = "INGRESS"
+  priority    = 1000
+  description = "ICMP diagnostics from the approved administrative ranges only."
+
+  source_ranges = var.ssh_allowed_cidrs
+  target_tags   = [var.instance_tag]
+
+  allow {
+    protocol = "icmp"
+  }
+
+  log_config {
+    metadata = "EXCLUDE_ALL_METADATA"
+  }
+}
+
 resource "google_compute_firewall" "wireguard" {
   name        = "${var.name_prefix}-allow-wireguard"
   network     = google_compute_network.vpn.name

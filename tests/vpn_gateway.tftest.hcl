@@ -19,6 +19,16 @@ run "plan_defaults" {
   }
 
   assert {
+    condition     = google_compute_firewall.icmp_diagnostics.source_ranges == toset(["203.0.113.0/24"])
+    error_message = "ICMP diagnostics must only be allowed from the administrative ranges."
+  }
+
+  assert {
+    condition     = length([for rule in google_compute_firewall.icmp_diagnostics.allow : rule if rule.protocol == "icmp"]) == 1
+    error_message = "The diagnostics rule must allow ICMP."
+  }
+
+  assert {
     condition     = length([for rule in google_compute_firewall.deny_all_ingress.deny : rule if rule.protocol == "all"]) == 1
     error_message = "The fallback rule must deny all remaining ingress traffic."
   }

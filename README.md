@@ -128,6 +128,7 @@ output`.
 ## Безопасность
 
 - SSH только с явного allowlist; `0.0.0.0/0` запрещён validation.
+- ICMP (ping/traceroute) разрешён только с тех же административных диапазонов.
 - OS Login, `block-project-ssh-keys=TRUE`, serial console выключена.
 - Shielded VM: Secure Boot, vTPM, integrity monitoring.
 - VM работает под отдельным SA; project-level роли — только
@@ -175,18 +176,27 @@ Job `plan` собирает план из пустого локального st
 - артефакты `terraform-plan` (`plan.txt`, `plan.log`, `tfplan`, `plan.diff`,
   `plan-diff-stat.txt`) с retention 5 дней.
 
-Как считается diff: бот достаёт предыдущий план из своего комментария, пишет
-его во временный файл и запускает `diff -u previous-plan.txt plan.txt`. На
-первом запуске PR сравнивать не с чем, поэтому выводится
-`First plan for this pull request`; на следующем push появляется diff. Если
-инфраструктура не изменилась, секция пишет
-`No infrastructure changes since the previous plan`.
+Как считается diff: бот строит два сравнения.
 
-Ограничения diff: сравниваются только последовательные запуски одного PR, а не
-ветка с `main`. Формат плана зависит от версии Terraform и провайдера, поэтому
+1. **Changes since main** — скачивает artifact `terraform-plan` из последнего
+   успешного запуска на base branch и сравнивает его с текущим планом. Это
+   показывает, что именно приносит PR относительно `main`.
+2. **Changes since previous run** — достаёт предыдущий план из своего
+   комментария в этом же PR и сравнивает с новым. Это показывает инкремент
+   между push'ами.
+
+Если artifact базовой ветки недоступен, секция пишет
+`Base branch plan is unavailable for comparison`; если предыдущего комментария
+нет — `First plan for this pull request`. Когда инфраструктура не менялась,
+соответствующая секция пишет `No infrastructure changes ...`.
+
+Ограничения diff: значения, неизвестные до apply (например,
+`metadata_startup_script`, содержащий ещё не созданный статический IP), в diff
+не попадают. Формат плана зависит от версии Terraform и провайдера, поэтому
 после обновления версий первый diff может быть шумным. Полный план в
-комментарии обрезается после 40 000 символов, diff — после 15 000; полные
-версии лежат в артефактах.
+комментарии обрезается после 40 000 символов, каждый diff — после 15 000;
+полные версии лежат в артефактах.
+
 
 Что это даёт: видно, какие ресурсы будут созданы, какие поля изменятся и
 сколько ресурсов в diff. Чего это не даёт: не проверяет drift, реальные права
@@ -202,11 +212,13 @@ Job `report` запускается всегда (`if: always()`), даже ес
 Что в отчёте:
 
 - общий вердикт: все gate'ы прошли или что-то упало;
-- таблица по каждому gate'у: Format, Version, Terraform plan, тесты на
-  Terraform 1.9.8 и 1.15.6, TFLint, Checkov;
+- таблица по каждому gate'у: Format, Version, Terraform plan, diff против
+  `main` и против предыдущего запуска, тесты на Terraform 1.9.8 и 1.15.6,
+  TFLint, Checkov;
 - фактический результат тестов из логов, например `Success! 4 passed, 0 failed`;
-- сводка плана, например `Plan: 12 to add, 0 to change, 0 to destroy`;
-- diff против предыдущего плана: `4 added, 2 removed` или `no previous plan`;
+- сводка плана, например `Plan: 13 to add, 0 to change, 0 to destroy`;
+- diff против `main` и предыдущего запуска: `4 added, 2 removed`, `no base plan`
+  или `no previous plan`;
 - commit, ref, событие, автор и ссылка на запуск.
 
 Логи тестов и план загружаются артефактами `terraform-test-*` и
