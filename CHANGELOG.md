@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 The current version lives in `VERSION` and is bumped by one patch for every
 merged pull request.
 
+## [0.0.7] - 2026-10-19
+
+### Added
+
+- GitHub Pages documentation site built with MkDocs Material and deployed by
+  the `Documentation` workflow.
+
 ## [0.0.6] - 2026-10-19
 
 ### Added
