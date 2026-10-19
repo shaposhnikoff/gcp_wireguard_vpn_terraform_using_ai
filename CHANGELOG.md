@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 The current version lives in `VERSION` and is bumped by one patch for every
 merged pull request.
 
+## [0.0.5] - 2026-10-19
+
+### Changed
+
+- Show the plan diff in a collapsible block at the bottom of the verification
+  report, after the gate table and before the commit metadata.
+
 ## [0.0.4] - 2026-10-19
 
 ### Fixed
