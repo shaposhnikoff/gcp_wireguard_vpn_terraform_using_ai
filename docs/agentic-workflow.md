@@ -39,7 +39,8 @@
 | Провайдер-специфичные ошибки | `tflint --recursive` | merge |
 | Поведение модуля | `terraform test` | merge |
 | Политики безопасности | `checkov`, `trivy config`, `gitleaks` | merge при high/critical, кроме документированных исключений |
-| Изменения в облаке | `terraform plan -out=tfplan` | apply |
+| Offline-план в CI | `terraform plan -refresh=false` без backend и кредов | merge при ошибках конфигурации |
+| Изменения в облаке | `terraform plan -out=tfplan` с реальным backend | apply |
 | Стоимость | `infracost diff` | порог бюджета |
 
 `make verify` объединяет первые четыре gate'а и опционально сканеры.
@@ -61,6 +62,11 @@
    остановиться и запросить решение человека.
 
 ## Что проверяется в plan
+
+CI строит offline-план из пустого state: без backend, с `-refresh=false` и
+фиктивным токеном. Он ловит ошибки графа ресурсов и показывает diff, но не
+проверяет drift и реальные права. Перед apply нужен отдельный план против
+настоящего проекта.
 
 - `terraform plan -detailed-exitcode`: 0 — изменений нет, 2 — есть, 1 — ошибка.
 - `terraform show -json tfplan` + `jq`/`conftest`:

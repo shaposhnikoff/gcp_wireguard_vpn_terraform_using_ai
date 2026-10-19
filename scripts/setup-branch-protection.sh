@@ -20,6 +20,7 @@ gh api -X PUT "repos/${REPO}/branches/main/protection" --input - <<'JSON'
     "strict": true,
     "contexts": [
       "Format",
+      "Terraform plan",
       "Validate and test (Terraform 1.9.8)",
       "Validate and test (Terraform 1.15.6)",
       "TFLint",
