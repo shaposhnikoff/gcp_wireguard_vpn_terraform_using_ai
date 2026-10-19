@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 The current version lives in `VERSION` and is bumped by one patch for every
 merged pull request.
 
+## [0.0.2] - 2026-10-19
+
+### Changed
+
+- Upgrade GitHub Actions to Node.js 24 runtimes: `actions/checkout@v7`,
+  `hashicorp/setup-terraform@v4`, `actions/upload-artifact@v7`,
+  `actions/download-artifact@v8`, `actions/github-script@v9` and
+  `terraform-linters/setup-tflint@v6.3.2`.
+- Pin workflows to the `ubuntu-24.04` runner image instead of the moving
+  `ubuntu-latest` label.
+
 ## [0.0.1] - 2026-10-19
 
 ### Added
