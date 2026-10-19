@@ -3,6 +3,8 @@
 *.tfstate.*
 tfplan
 plan.json
+plan.txt
+plan.log
 crash.log
 crash.*.log
 

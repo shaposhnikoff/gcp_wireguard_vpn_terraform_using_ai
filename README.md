@@ -145,14 +145,37 @@ push в `main` и вручную через `workflow_dispatch`:
 | Job | Что делает |
 |---|---|
 | `fmt` | `terraform fmt -check -recursive -diff` |
+| `plan` | Offline `terraform plan` без backend и без GCP-кредов; план публикуется в PR |
 | `validate-and-test` | `init -backend=false`, `validate`, `terraform test` на Terraform 1.9.8 и 1.15.6 |
 | `tflint` | `tflint --init` + `tflint --recursive` с Google ruleset 0.40.0 |
 | `security` | Checkov, **блокирующий**; исключения описаны в `.checkov.yaml` |
 | `report` | Финальный Job Summary со статусом всех gate'ов и счётчиками тестов |
 
-GCP-креды и секреты не нужны: тесты используют `mock_provider`, `plan` и
-`apply` в CI не выполняются. Это осознанно: план требует реального проекта и
-ревью человеком.
+GCP-креды и секреты не нужны. Тесты используют `mock_provider`, а offline-план
+работает без backend и без реальных credentials: провайдеру передаётся
+фиктивный статический токен, refresh отключён. `apply` в CI не выполняется.
+
+### Offline-план в PR
+
+Job `plan` собирает план из пустого локального state:
+
+- `terraform init -backend=false` — без GCS;
+- `-refresh=false -lock=false` — без чтения реального state и без API-запросов;
+- `envs/ci/terraform.tfvars.json` — фиксированные тестовые значения;
+- `GOOGLE_OAUTH_ACCESS_TOKEN=ci-offline-plan-token` — заглушка, чтобы провайдер
+  сконфигурировался.
+
+Результат:
+
+- комментарий в PR с планом под `<details>`; при повторном запуске он
+  обновляется, а не дублируется;
+- артефакты `terraform-plan` (`plan.txt`, `plan.log`, `tfplan`) с retention
+  5 дней.
+
+Что это даёт: видно, какие ресурсы будут созданы, какие поля изменятся и
+сколько ресурсов в diff. Чего это не даёт: не проверяет drift, реальные права
+и квоты и не заменяет plan против настоящего проекта. Перед `apply` всё равно
+нужен `make plan` с реальным backend и кредами.
 
 ### Отчёт по каждому запуску
 
@@ -163,15 +186,16 @@ Job `report` запускается всегда (`if: always()`), даже ес
 Что в отчёте:
 
 - общий вердикт: все gate'ы прошли или что-то упало;
-- таблица по каждому gate'у: Format, тесты на Terraform 1.9.8 и 1.15.6,
-  TFLint, Checkov;
+- таблица по каждому gate'у: Format, Terraform plan, тесты на Terraform 1.9.8
+  и 1.15.6, TFLint, Checkov;
 - фактический результат тестов из логов, например `Success! 4 passed, 0 failed`;
+- сводка плана, например `Plan: 12 to add, 0 to change, 0 to destroy`;
 - commit, ref, событие, автор и ссылка на запуск.
 
-Логи тестов загружаются артефактами `terraform-test-*` с retention 3 дня,
-поэтому отчёт показывает результат, даже если job с тестами упал. Сам отчёт
-не блокирует merge: он только агрегирует статусы, решение принимается по
-красным/зелёным job'ам выше.
+Логи тестов и план загружаются артефактами `terraform-test-*` и
+`terraform-plan`, поэтому отчёт показывает результат, даже если соответствующая
+job упала. Сам отчёт не блокирует merge: он только агрегирует статусы, решение
+принимается по красным/зелёным job'ам выше.
 
 ## Процесс изменений: только через pull request
 
@@ -187,6 +211,7 @@ Job `report` запускается всегда (`if: always()`), даже ес
 Обязательные checks:
 
 - `Format`
+- `Terraform plan`
 - `Validate and test (Terraform 1.9.8)`
 - `Validate and test (Terraform 1.15.6)`
 - `TFLint`

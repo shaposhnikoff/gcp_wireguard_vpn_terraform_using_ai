@@ -10,6 +10,7 @@ on:
 permissions:
   contents: read
   actions: read
+  pull-requests: write
 
 concurrency:
   group: terraform-${{ github.workflow }}-${{ github.ref }}
@@ -36,6 +37,113 @@ jobs:
 
       - name: Check formatting
         run: terraform fmt -check -recursive -diff
+
+  plan:
+    name: Terraform plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.15.6"
+          terraform_wrapper: false
+
+      - name: Init providers without backend
+        run: terraform init -backend=false -input=false
+
+      - name: Create offline plan
+        env:
+          # Dummy static token: the provider must configure, but no API call
+          # is expected because refresh is disabled and state is empty.
+          GOOGLE_OAUTH_ACCESS_TOKEN: ci-offline-plan-token
+        shell: bash
+        run: |
+          set -euo pipefail
+          terraform plan \
+            -refresh=false \
+            -lock=false \
+            -input=false \
+            -var-file=envs/ci/terraform.tfvars.json \
+            -out=tfplan \
+            -no-color | tee plan.log
+          terraform show -no-color tfplan > plan.txt
+
+      - name: Upload plan artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan
+          path: |
+            plan.txt
+            plan.log
+            tfplan
+          retention-days: 5
+          if-no-files-found: ignore
+
+      - name: Publish plan to pull request
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- terraform-offline-plan -->';
+            let plan = fs.readFileSync('plan.txt', 'utf8');
+            const limit = 55000;
+
+            if (plan.length > limit) {
+              plan = `${plan.slice(0, limit)}\n\n... truncated ...`;
+            }
+
+            const body = [
+              marker,
+              '## Terraform offline plan',
+              '',
+              '> Generated without a backend and without GCP credentials. Refresh is disabled: this validates the resource graph and the diff against empty state, not drift.',
+              '',
+              '<details><summary>Show plan</summary>',
+              '',
+              '````hcl',
+              plan,
+              '````',
+              '',
+              '</details>',
+              '',
+              `[Download plan artifacts](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})`,
+            ].join('\n');
+
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number,
+              per_page: 100,
+            });
+            const existing = comments.find(
+              (comment) => comment.user?.type === 'Bot' && comment.body?.includes(marker),
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number,
+                body,
+              });
+            }
 
   validate-and-test:
     name: Validate and test (Terraform ${{ matrix.terraform }})
@@ -66,7 +174,10 @@ jobs:
         run: terraform validate
 
       - name: Run Terraform tests
-        run: terraform test -no-color 2>&1 | tee "tf-test-${{ matrix.terraform }}.log"
+        shell: bash
+        run: |
+          set -o pipefail
+          terraform test -no-color 2>&1 | tee "tf-test-${{ matrix.terraform }}.log"
 
       - name: Upload test log
         if: always()
@@ -124,6 +235,7 @@ jobs:
     if: always()
     needs:
       - fmt
+      - plan
       - validate-and-test
       - tflint
       - security
@@ -137,10 +249,18 @@ jobs:
           path: artifacts
           merge-multiple: true
 
+      - name: Download plan
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: terraform-plan
+          path: plan-artifacts
+
       - name: Render summary
         shell: bash
         env:
           FMT_RESULT: ${{ needs.fmt.result }}
+          PLAN_RESULT: ${{ needs.plan.result }}
           TEST_RESULT: ${{ needs.validate-and-test.result }}
           TFLINT_RESULT: ${{ needs.tflint.result }}
           CHECKOV_RESULT: ${{ needs.security.result }}
@@ -190,8 +310,13 @@ jobs:
           TEST_198_STATE="$(test_state 1.9.8)"
           TEST_115_STATE="$(test_state 1.15.6)"
 
-          if [[ "$FMT_RESULT" == "success" && "$TEST_RESULT" == "success" && "$TFLINT_RESULT" == "success" && "$CHECKOV_RESULT" == "success" ]]; then
-            OVERALL="$(printf '### ✅ All Terraform gates passed\n\nThe change is ready for review. No plan or apply was executed by CI.')"
+          PLAN_SUMMARY="$(grep -Eo 'Plan: [0-9]+ to add, [0-9]+ to change, [0-9]+ to destroy' plan-artifacts/plan.txt 2>/dev/null | tail -1 || true)"
+          if [[ -z "$PLAN_SUMMARY" ]]; then
+            PLAN_SUMMARY='plan unavailable'
+          fi
+
+          if [[ "$FMT_RESULT" == "success" && "$PLAN_RESULT" == "success" && "$TEST_RESULT" == "success" && "$TFLINT_RESULT" == "success" && "$CHECKOV_RESULT" == "success" ]]; then
+            OVERALL="$(printf '### ✅ All Terraform gates passed\n\nThe change is ready for review. CI produced an offline plan only; apply stays manual.')"
           else
             OVERALL="$(printf '### ❌ Verification failed\n\nAt least one gate failed. Open the failing job below for details.')"
           fi
@@ -204,6 +329,7 @@ jobs:
             echo "| Gate | Result | Details |"
             echo "|:--|:--:|:--|"
             echo "| Format | $(icon "$FMT_RESULT") ${FMT_RESULT} | \`terraform fmt -check\` |"
+            echo "| Terraform plan | $(icon "$PLAN_RESULT") ${PLAN_RESULT} | ${PLAN_SUMMARY} |"
             echo "| Tests on Terraform 1.9.8 | $(icon "$TEST_198_STATE") ${TEST_198_STATE} | ${TEST_198} |"
             echo "| Tests on Terraform 1.15.6 | $(icon "$TEST_115_STATE") ${TEST_115_STATE} | ${TEST_115} |"
             echo "| TFLint | $(icon "$TFLINT_RESULT") ${TFLINT_RESULT} | Google ruleset 0.40.0 |"
@@ -213,7 +339,7 @@ jobs:
             echo
             echo "[Open workflow run](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})"
             echo
-            echo "_CI checks formatting, schema, mocked Terraform tests, linting and security. Plan and apply stay manual._"
+            echo "_CI checks formatting, schema, mocked tests, linting, security and an offline plan. Apply stays manual._"
           } >> "$GITHUB_STEP_SUMMARY"
 
           cat "$GITHUB_STEP_SUMMARY"
