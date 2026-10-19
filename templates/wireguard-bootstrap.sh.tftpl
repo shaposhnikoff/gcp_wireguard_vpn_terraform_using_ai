@@ -30,7 +30,6 @@ apt-get install -y --no-install-recommends \
   ca-certificates \
   curl \
   iptables \
-  iptables-persistent \
   jq \
   python3 \
   wireguard-tools
@@ -110,7 +109,6 @@ done
 
 systemctl enable wg-quick@wg0
 systemctl restart wg-quick@wg0
-netfilter-persistent save
 
 ACCESS_TOKEN="$(curl -sf -H 'Metadata-Flavor: Google' \
   'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token' \

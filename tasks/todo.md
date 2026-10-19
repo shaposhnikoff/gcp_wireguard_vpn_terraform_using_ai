@@ -8,9 +8,9 @@
 - [x] Native Terraform tests с mock_provider
 - [x] Makefile, verify/security скрипты, Cloud Build, README
 - [x] Диаграмма потоков
-- [ ] Прогнать `terraform fmt -check`, `init -backend=false`, `validate`, `test`
-- [ ] Прогнать `tflint` и `checkov`, если установлены
-- [ ] Проверить шаблон через `bash -n` после рендера
+- [x] Прогнать `terraform fmt -check`, `init -backend=false`, `validate`, `test`
+- [x] Проверить шаблон через `bash -n` после рендера
+- [ ] Прогнать `tflint` и `checkov`, если установлены (локально не установлены)
 - [ ] Ревью плана: отсутствие destroy/replace, корректные CIDR
 
 ## Решения
@@ -30,4 +30,10 @@
 
 ## Review
 
-Заполняется после прогона gate'ов.
+- `terraform fmt -check -recursive` — pass.
+- `terraform validate` — pass.
+- `terraform test` — 4 passed, 0 failed.
+- Rendered startup script — `bash -n` pass.
+- `tflint`, `checkov`, `trivy`, `gitleaks` — не установлены локально, шаги
+  добавлены в `scripts/verify.sh` и `scripts/security.sh`.
+- `terraform plan` — не запускался: нет `terraform.tfvars` и доступа к проекту.
