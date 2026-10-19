@@ -95,6 +95,28 @@ jobs:
             -no-color | tee plan.log
           terraform show -no-color tfplan > plan.txt
 
+      - name: Download base branch plan
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE_RUN="$(gh run list \
+            --workflow terraform.yml \
+            --branch "${{ github.base_ref }}" \
+            --status success \
+            --limit 1 \
+            --json databaseId \
+            --jq '.[0].databaseId' 2>/dev/null || true)"
+          if [[ -z "${BASE_RUN}" ]]; then
+            echo "No successful run found on the base branch."
+            exit 0
+          fi
+          echo "Downloading plan from base run ${BASE_RUN}."
+          gh run download "${BASE_RUN}" --name terraform-plan --dir base-plan || true
+
       - name: Publish plan to pull request
         if: github.event_name == 'pull_request'
         continue-on-error: true
@@ -108,6 +130,43 @@ jobs:
             const planStart = '<!-- plan-start -->';
             const planEnd = '<!-- plan-end -->';
             const plan = fs.readFileSync('plan.txt', 'utf8');
+
+            let baseSection = 'Base branch plan is unavailable for comparison.';
+
+            if (fs.existsSync('base-plan/plan.txt')) {
+              const basePlan = fs.readFileSync('base-plan/plan.txt', 'utf8');
+              fs.writeFileSync(
+                'base-plan.txt',
+                basePlan.endsWith('\n') ? basePlan : `${basePlan}\n`,
+              );
+
+              const result = spawnSync(
+                'diff',
+                ['-u', '--label', 'main', '--label', 'pull-request', 'base-plan.txt', 'plan.txt'],
+                { encoding: 'utf8' },
+              );
+              const diff = result.stdout || '';
+              const added = diff
+                .split('\n')
+                .filter((line) => line.startsWith('+') && !line.startsWith('+++')).length;
+              const removed = diff
+                .split('\n')
+                .filter((line) => line.startsWith('-') && !line.startsWith('---')).length;
+
+              fs.writeFileSync('plan-base.diff', diff);
+              fs.writeFileSync('plan-base-diff-stat.txt', `${added} added, ${removed} removed\n`);
+
+              if (diff.trim() === '') {
+                baseSection = 'No infrastructure changes compared with the base branch.';
+              } else {
+                const maxBaseDiff = 15000;
+                const shown =
+                  diff.length > maxBaseDiff
+                    ? `${diff.slice(0, maxBaseDiff)}\n... diff truncated ...`
+                    : diff;
+                baseSection = ['```diff', shown, '```'].join('\n');
+              }
+            }
 
             const { owner, repo } = context.repo;
             const issue_number = context.issue.number;
@@ -177,7 +236,11 @@ jobs:
               '',
               '> Generated without a backend and without GCP credentials. Refresh is disabled: this validates the resource graph and the diff against empty state, not drift.',
               '',
-              '### Changes since previous plan',
+              '### Changes since main',
+              '',
+              baseSection,
+              '',
+              '### Changes since previous run',
               '',
               diffSection,
               '',
@@ -221,6 +284,8 @@ jobs:
             tfplan
             plan.diff
             plan-diff-stat.txt
+            plan-base.diff
+            plan-base-diff-stat.txt
           retention-days: 5
           if-no-files-found: ignore
 
@@ -404,6 +469,11 @@ jobs:
             PLAN_DIFF="$(tr -d '\n' < plan-artifacts/plan-diff-stat.txt)"
           fi
 
+          PLAN_BASE_DIFF='no base plan'
+          if [[ -f plan-artifacts/plan-base-diff-stat.txt ]]; then
+            PLAN_BASE_DIFF="$(tr -d '\n' < plan-artifacts/plan-base-diff-stat.txt)"
+          fi
+
           VERSION_VALUE="$(tr -d '[:space:]' < VERSION)"
 
           if [[ "$FMT_RESULT" == "success" && "$VERSION_RESULT" == "success" && "$PLAN_RESULT" == "success" && "$TEST_RESULT" == "success" && "$TFLINT_RESULT" == "success" && "$CHECKOV_RESULT" == "success" ]]; then
@@ -422,7 +492,8 @@ jobs:
             echo "| Format | $(icon "$FMT_RESULT") ${FMT_RESULT} | \`terraform fmt -check\` |"
             echo "| Version | $(icon "$VERSION_RESULT") ${VERSION_RESULT} | \`${VERSION_VALUE}\` · CHANGELOG entry present |"
             echo "| Terraform plan | $(icon "$PLAN_RESULT") ${PLAN_RESULT} | ${PLAN_SUMMARY} |"
-            echo "| Plan diff | $(icon "$PLAN_RESULT") ${PLAN_RESULT} | ${PLAN_DIFF} |"
+            echo "| Plan diff vs main | $(icon "$PLAN_RESULT") ${PLAN_RESULT} | ${PLAN_BASE_DIFF} |"
+            echo "| Plan diff vs previous run | $(icon "$PLAN_RESULT") ${PLAN_RESULT} | ${PLAN_DIFF} |"
             echo "| Tests on Terraform 1.9.8 | $(icon "$TEST_198_STATE") ${TEST_198_STATE} | ${TEST_198} |"
             echo "| Tests on Terraform 1.15.6 | $(icon "$TEST_115_STATE") ${TEST_115_STATE} | ${TEST_115} |"
             echo "| TFLint | $(icon "$TFLINT_RESULT") ${TFLINT_RESULT} | Google ruleset 0.40.0 |"
