@@ -145,6 +145,7 @@ push в `main` и вручную через `workflow_dispatch`:
 | Job | Что делает |
 |---|---|
 | `fmt` | `terraform fmt -check -recursive -diff` |
+| `version` | Проверка `VERSION` и записи в `CHANGELOG.md`; на PR — ровно +1 patch к `main` |
 | `plan` | Offline `terraform plan` без backend и без GCP-кредов; план публикуется в PR |
 | `validate-and-test` | `init -backend=false`, `validate`, `terraform test` на Terraform 1.9.8 и 1.15.6 |
 | `tflint` | `tflint --init` + `tflint --recursive` с Google ruleset 0.40.0 |
@@ -169,8 +170,23 @@ Job `plan` собирает план из пустого локального st
 
 - комментарий в PR с планом под `<details>`; при повторном запуске он
   обновляется, а не дублируется;
-- артефакты `terraform-plan` (`plan.txt`, `plan.log`, `tfplan`) с retention
-  5 дней.
+- секция **Changes since previous plan** с unified diff против плана из
+  предыдущего запуска этого же PR;
+- артефакты `terraform-plan` (`plan.txt`, `plan.log`, `tfplan`, `plan.diff`,
+  `plan-diff-stat.txt`) с retention 5 дней.
+
+Как считается diff: бот достаёт предыдущий план из своего комментария, пишет
+его во временный файл и запускает `diff -u previous-plan.txt plan.txt`. На
+первом запуске PR сравнивать не с чем, поэтому выводится
+`First plan for this pull request`; на следующем push появляется diff. Если
+инфраструктура не изменилась, секция пишет
+`No infrastructure changes since the previous plan`.
+
+Ограничения diff: сравниваются только последовательные запуски одного PR, а не
+ветка с `main`. Формат плана зависит от версии Terraform и провайдера, поэтому
+после обновления версий первый diff может быть шумным. Полный план в
+комментарии обрезается после 40 000 символов, diff — после 15 000; полные
+версии лежат в артефактах.
 
 Что это даёт: видно, какие ресурсы будут созданы, какие поля изменятся и
 сколько ресурсов в diff. Чего это не даёт: не проверяет drift, реальные права
@@ -186,10 +202,11 @@ Job `report` запускается всегда (`if: always()`), даже ес
 Что в отчёте:
 
 - общий вердикт: все gate'ы прошли или что-то упало;
-- таблица по каждому gate'у: Format, Terraform plan, тесты на Terraform 1.9.8
-  и 1.15.6, TFLint, Checkov;
+- таблица по каждому gate'у: Format, Version, Terraform plan, тесты на
+  Terraform 1.9.8 и 1.15.6, TFLint, Checkov;
 - фактический результат тестов из логов, например `Success! 4 passed, 0 failed`;
 - сводка плана, например `Plan: 12 to add, 0 to change, 0 to destroy`;
+- diff против предыдущего плана: `4 added, 2 removed` или `no previous plan`;
 - commit, ref, событие, автор и ссылка на запуск.
 
 Логи тестов и план загружаются артефактами `terraform-test-*` и
@@ -211,6 +228,7 @@ job упала. Сам отчёт не блокирует merge: он тольк
 Обязательные checks:
 
 - `Format`
+- `Version and changelog`
 - `Terraform plan`
 - `Validate and test (Terraform 1.9.8)`
 - `Validate and test (Terraform 1.15.6)`
@@ -224,6 +242,25 @@ job упала. Сам отчёт не блокирует merge: он тольк
 
 ```bash
 ./scripts/setup-branch-protection.sh
+```
+
+## Версионирование и CHANGELOG
+
+- `VERSION` — текущая версия в semver.
+- `CHANGELOG.md` — английский, формат Keep a Changelog.
+- Каждый merge в `main` — один squash-commit, поэтому patch-версия растёт на
+  единицу: `0.0.1` → `0.0.2` → `0.0.3`.
+- `make version-bump` поднимает patch и напоминает добавить запись.
+- CI job `Version and changelog` требует ровно `+1` patch к `origin/main` и
+  наличие заголовка `## [x.y.z]` в `CHANGELOG.md`.
+- `terraform output module_version` отдаёт версию конфигурации.
+
+Порядок для каждого изменения:
+
+```bash
+make version-bump
+# добавить секцию ## [x.y.z] - YYYY-MM-DD в CHANGELOG.md на английском
+make verify
 ```
 
 ## Checkov: блокирующая проверка и исключения

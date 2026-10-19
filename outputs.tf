@@ -32,3 +32,8 @@ output "client_config_secret_id" {
   description = "Fully qualified Secret Manager secret resource name."
   value       = google_secret_manager_secret.client_config.id
 }
+
+output "module_version" {
+  description = "Version of this configuration, read from the VERSION file."
+  value       = trimspace(file("${path.module}/VERSION"))
+}

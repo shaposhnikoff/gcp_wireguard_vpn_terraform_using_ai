@@ -3,7 +3,7 @@ TFVARS := envs/$(ENV)/terraform.tfvars
 
 .DEFAULT_GOAL := help
 
-.PHONY: help init fmt fmt-check validate test plan plan-json apply output destroy verify security clean
+.PHONY: help init fmt fmt-check validate test plan plan-json apply output destroy verify security clean version-bump
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-12s %s\n", $$1, $$2}'
@@ -47,3 +47,6 @@ security: ## Run optional security scanners when installed
 
 clean: ## Remove local Terraform artifacts
 	rm -rf .terraform .terraform.lock.hcl tfplan plan.json crash.log
+
+version-bump: ## Increment the patch version and print CHANGELOG instructions
+	./scripts/bump-version.sh
