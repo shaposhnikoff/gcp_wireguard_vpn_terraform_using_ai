@@ -176,18 +176,20 @@ Job `plan` собирает план из пустого локального st
 - артефакты `terraform-plan` (`plan.txt`, `plan.log`, `tfplan`, `plan.diff`,
   `plan-diff-stat.txt`) с retention 5 дней.
 
-Как считается diff: бот строит два сравнения.
+Как считается diff: job скачивает artifact `terraform-plan` из последнего
+успешного запуска и сравнивает его с текущим планом.
 
-1. **Changes since main** — скачивает artifact `terraform-plan` из последнего
-   успешного запуска на base branch и сравнивает его с текущим планом. Это
-   показывает, что именно приносит PR относительно `main`.
-2. **Changes since previous run** — достаёт предыдущий план из своего
-   комментария в этом же PR и сравнивает с новым. Это показывает инкремент
-   между push'ами.
+- На `pull_request` сравнение идёт с base branch (`main`) — секция
+  **Changes since main** показывает, что приносит PR. Дополнительно план
+  сравнивается с предыдущим комментарием этого PR — секция
+  **Changes since previous run** показывает инкремент между push'ами.
+- На push в `main` сравнение идёт с предыдущим успешным запуском на `main`,
+  поэтому в отчёте видно, что изменил merge. Строка про предыдущий push PR
+  в этом случае пишет `n/a on main`.
 
-Если artifact базовой ветки недоступен, секция пишет
-`Base branch plan is unavailable for comparison`; если предыдущего комментария
-нет — `First plan for this pull request`. Когда инфраструктура не менялась,
+Если сравнение недоступно (первый запуск или истёк artifact), секция пишет
+`No comparison plan available`; если предыдущего комментария нет —
+`First plan for this pull request`. Когда инфраструктура не менялась,
 соответствующая секция пишет `No infrastructure changes ...`.
 
 Ограничения diff: значения, неизвестные до apply (например,
