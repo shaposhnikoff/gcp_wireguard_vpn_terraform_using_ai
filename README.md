@@ -173,6 +173,34 @@ Job `report` запускается всегда (`if: always()`), даже ес
 не блокирует merge: он только агрегирует статусы, решение принимается по
 красным/зелёным job'ам выше.
 
+## Процесс изменений: только через pull request
+
+`main` защищён: прямой push, force-push и удаление ветки запрещены. Любое
+изменение проходит через PR, даже если это одна строка в README.
+
+1. Создать ветку с префиксом `feat/`, `fix/`, `chore/` или `docs/`.
+2. Сделать коммит на английском в формате Conventional Commits.
+3. Открыть PR: `gh pr create --fill`.
+4. Дождаться зелёных обязательных checks.
+5. Смержить squash-merge и удалить ветку.
+
+Обязательные checks:
+
+- `Format`
+- `Validate and test (Terraform 1.9.8)`
+- `Validate and test (Terraform 1.15.6)`
+- `TFLint`
+- `Security scan (Checkov)`
+
+`Verification report` — информационный job: он не блокирует merge, но
+показывает сводку по всем gate'ам в Summary запуска.
+
+Защита ветки воспроизводится скриптом (нужны права admin на репозиторий):
+
+```bash
+./scripts/setup-branch-protection.sh
+```
+
 ## Checkov: блокирующая проверка и исключения
 
 `security` — обязательный job. Любая новая находка Checkov валит PR. Два
