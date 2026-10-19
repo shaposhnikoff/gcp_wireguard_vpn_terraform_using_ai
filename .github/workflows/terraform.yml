@@ -95,27 +95,51 @@ jobs:
             -no-color | tee plan.log
           terraform show -no-color tfplan > plan.txt
 
-      - name: Download base branch plan
-        if: github.event_name == 'pull_request'
+      - name: Download comparison plan
         continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
-          BASE_RUN="$(gh run list \
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BRANCH="${{ github.base_ref }}"
+            LABEL="main"
+          else
+            BRANCH="${{ github.ref_name }}"
+            LABEL="previous run"
+          fi
+          echo "Looking for the latest successful run on ${BRANCH} (${LABEL})."
+          COMPARISON_RUN="$(gh run list \
             --workflow terraform.yml \
-            --branch "${{ github.base_ref }}" \
+            --branch "${BRANCH}" \
             --status success \
             --limit 1 \
             --json databaseId \
             --jq '.[0].databaseId' 2>/dev/null || true)"
-          if [[ -z "${BASE_RUN}" ]]; then
-            echo "No successful run found on the base branch."
+          if [[ -z "${COMPARISON_RUN}" ]]; then
+            echo "No successful comparison run found."
             exit 0
           fi
-          echo "Downloading plan from base run ${BASE_RUN}."
-          gh run download "${BASE_RUN}" --name terraform-plan --dir base-plan || true
+          echo "Downloading plan from run ${COMPARISON_RUN}."
+          gh run download "${COMPARISON_RUN}" --name terraform-plan --dir base-plan || true
+
+      - name: Generate plan diff
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -f base-plan/plan.txt ]]; then
+            echo "No comparison plan available."
+            exit 0
+          fi
+          if [[ -n "$(tail -c 1 base-plan/plan.txt)" ]]; then
+            printf '\n' >> base-plan/plan.txt
+          fi
+          diff -u --label comparison --label current base-plan/plan.txt plan.txt > plan-base.diff || true
+          added="$(awk '/^\+/ && !/^\+\+\+/ {count++} END {print count+0}' plan-base.diff)"
+          removed="$(awk '/^-/ && !/^---/ {count++} END {print count+0}' plan-base.diff)"
+          printf '%s added, %s removed\n' "${added}" "${removed}" > plan-base-diff-stat.txt
+          echo "Plan diff vs comparison: ${added} added, ${removed} removed."
 
       - name: Publish plan to pull request
         if: github.event_name == 'pull_request'
@@ -131,33 +155,13 @@ jobs:
             const planEnd = '<!-- plan-end -->';
             const plan = fs.readFileSync('plan.txt', 'utf8');
 
-            let baseSection = 'Base branch plan is unavailable for comparison.';
+            let baseSection = 'No comparison plan available.';
 
-            if (fs.existsSync('base-plan/plan.txt')) {
-              const basePlan = fs.readFileSync('base-plan/plan.txt', 'utf8');
-              fs.writeFileSync(
-                'base-plan.txt',
-                basePlan.endsWith('\n') ? basePlan : `${basePlan}\n`,
-              );
-
-              const result = spawnSync(
-                'diff',
-                ['-u', '--label', 'main', '--label', 'pull-request', 'base-plan.txt', 'plan.txt'],
-                { encoding: 'utf8' },
-              );
-              const diff = result.stdout || '';
-              const added = diff
-                .split('\n')
-                .filter((line) => line.startsWith('+') && !line.startsWith('+++')).length;
-              const removed = diff
-                .split('\n')
-                .filter((line) => line.startsWith('-') && !line.startsWith('---')).length;
-
-              fs.writeFileSync('plan-base.diff', diff);
-              fs.writeFileSync('plan-base-diff-stat.txt', `${added} added, ${removed} removed\n`);
+            if (fs.existsSync('plan-base.diff')) {
+              const diff = fs.readFileSync('plan-base.diff', 'utf8');
 
               if (diff.trim() === '') {
-                baseSection = 'No infrastructure changes compared with the base branch.';
+                baseSection = 'No infrastructure changes compared with the comparison plan.';
               } else {
                 const maxBaseDiff = 15000;
                 const shown =
@@ -464,12 +468,18 @@ jobs:
             PLAN_SUMMARY='plan unavailable'
           fi
 
-          PLAN_DIFF='no previous plan'
-          if [[ -f plan-artifacts/plan-diff-stat.txt ]]; then
-            PLAN_DIFF="$(tr -d '\n' < plan-artifacts/plan-diff-stat.txt)"
+          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            PLAN_BASE_LABEL='main'
+            PLAN_DIFF='no previous plan'
+            if [[ -f plan-artifacts/plan-diff-stat.txt ]]; then
+              PLAN_DIFF="$(tr -d '\n' < plan-artifacts/plan-diff-stat.txt)"
+            fi
+          else
+            PLAN_BASE_LABEL='previous run'
+            PLAN_DIFF='n/a on main'
           fi
 
-          PLAN_BASE_DIFF='no base plan'
+          PLAN_BASE_DIFF='no comparison plan'
           if [[ -f plan-artifacts/plan-base-diff-stat.txt ]]; then
             PLAN_BASE_DIFF="$(tr -d '\n' < plan-artifacts/plan-base-diff-stat.txt)"
           fi
@@ -492,8 +502,8 @@ jobs:
             echo "| Format | $(icon "$FMT_RESULT") ${FMT_RESULT} | \`terraform fmt -check\` |"
             echo "| Version | $(icon "$VERSION_RESULT") ${VERSION_RESULT} | \`${VERSION_VALUE}\` · CHANGELOG entry present |"
             echo "| Terraform plan | $(icon "$PLAN_RESULT") ${PLAN_RESULT} | ${PLAN_SUMMARY} |"
-            echo "| Plan diff vs main | $(icon "$PLAN_RESULT") ${PLAN_RESULT} | ${PLAN_BASE_DIFF} |"
-            echo "| Plan diff vs previous run | $(icon "$PLAN_RESULT") ${PLAN_RESULT} | ${PLAN_DIFF} |"
+            echo "| Plan diff vs ${PLAN_BASE_LABEL} | $(icon "$PLAN_RESULT") ${PLAN_RESULT} | ${PLAN_BASE_DIFF} |"
+            echo "| Plan diff vs previous PR push | $(icon "$PLAN_RESULT") ${PLAN_RESULT} | ${PLAN_DIFF} |"
             echo "| Tests on Terraform 1.9.8 | $(icon "$TEST_198_STATE") ${TEST_198_STATE} | ${TEST_198} |"
             echo "| Tests on Terraform 1.15.6 | $(icon "$TEST_115_STATE") ${TEST_115_STATE} | ${TEST_115} |"
             echo "| TFLint | $(icon "$TFLINT_RESULT") ${TFLINT_RESULT} | Google ruleset 0.40.0 |"

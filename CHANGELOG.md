@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 The current version lives in `VERSION` and is bumped by one patch for every
 merged pull request.
 
+## [0.0.4] - 2026-10-19
+
+### Fixed
+
+- Compare plans against the previous successful run on `main` for post-merge
+  runs, so the report shows a real diff instead of `no base plan`.
+- Label the PR-only previous-push diff as `n/a on main` when running on `main`.
+
 ## [0.0.3] - 2026-10-19
 
 ### Added
