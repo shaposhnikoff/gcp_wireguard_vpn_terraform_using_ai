@@ -5,6 +5,9 @@ tfplan
 plan.json
 plan.txt
 plan.log
+plan.diff
+plan-diff-stat.txt
+previous-plan.txt
 crash.log
 crash.*.log
 

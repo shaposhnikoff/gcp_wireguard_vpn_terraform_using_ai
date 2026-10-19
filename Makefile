@@ -1,9 +1,10 @@
 ENV ?= prod
 TFVARS := envs/$(ENV)/terraform.tfvars
+CURRENT_VERSION := $(shell git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
 
 .DEFAULT_GOAL := help
 
-.PHONY: help init fmt fmt-check validate test plan plan-json apply output destroy verify security clean
+.PHONY: help init fmt fmt-check validate test plan plan-json apply output destroy verify security clean version version-bump tag release
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-12s %s\n", $$1, $$2}'
@@ -47,3 +48,16 @@ security: ## Run optional security scanners when installed
 
 clean: ## Remove local Terraform artifacts
 	rm -rf .terraform .terraform.lock.hcl tfplan plan.json crash.log
+
+version: ## Show the latest tag and the declared VERSION
+	@echo "Latest tag:   $(CURRENT_VERSION)"
+	@echo "VERSION file: v$$(tr -d '[:space:]' < VERSION)"
+
+version-bump: ## Increment the patch version and print CHANGELOG instructions
+	./scripts/bump-version.sh
+
+tag: ## Create and push an annotated tag for VERSION
+	./scripts/release.sh tag
+
+release: ## Create an annotated tag and a GitHub release from CHANGELOG.md
+	./scripts/release.sh release

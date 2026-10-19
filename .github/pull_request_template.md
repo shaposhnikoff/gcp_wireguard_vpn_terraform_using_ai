@@ -9,7 +9,8 @@
 ## Verification
 
 - [ ] `make verify` passes locally
-- [ ] Offline plan in the PR comment reviewed
+- [ ] `VERSION` bumped and `CHANGELOG.md` has an English entry
+- [ ] Offline plan and plan diff in the PR comment reviewed
 - [ ] `terraform plan` reviewed against the real project, no unexpected destroy or replace
 - [ ] New Checkov exceptions are documented in `.checkov.yaml` and below
 - [ ] No secrets, credentials, or private keys in the diff

@@ -12,6 +12,9 @@ cd "${ROOT_DIR}"
 echo "==> terraform fmt"
 terraform fmt -check -recursive
 
+echo "==> version and changelog"
+./scripts/check-version.sh
+
 echo "==> terraform init (local backend)"
 terraform init -backend=false -input=false
 
