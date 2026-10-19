@@ -1,0 +1,23 @@
+project_id        = "replace-with-your-project-id"
+region            = "europe-central2"
+zone              = "europe-central2-a"
+name_prefix       = "vpn-gw"
+vpn_port          = 51820
+vpn_client_names  = ["laptop", "phone"]
+
+# Replace with the exact egress ranges of your office, home and jump hosts.
+# Do not use 0.0.0.0/0: Terraform validation rejects it.
+ssh_allowed_cidrs = [
+  "198.51.100.10/32",
+  "203.0.113.0/28",
+]
+
+# WireGuard must be reachable from client networks. Narrow this list if your
+# clients have stable addresses.
+vpn_allowed_cidrs = ["0.0.0.0/0"]
+
+labels = {
+  owner       = "platform-team"
+  environment = "prod"
+  cost-center = "replace-me"
+}

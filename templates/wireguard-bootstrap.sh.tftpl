@@ -1,0 +1,148 @@
+#!/usr/bin/env bash
+#
+# First-boot bootstrap for the WireGuard gateway.
+# Rendered by Terraform; do not edit on the instance.
+#
+set -euo pipefail
+
+exec > >(tee -a /var/log/wireguard-bootstrap.log) 2>&1
+
+PROJECT_ID="${project_id}"
+SECRET_NAME="${secret_name}"
+VPN_PORT="${vpn_port}"
+VPN_SERVER_ADDRESS="${vpn_server_address}"
+VPN_PREFIX_LENGTH="${vpn_prefix_length}"
+VPN_SUBNET_CIDR="${vpn_subnet_cidr}"
+CLIENT_NAMES="${client_names}"
+PUBLIC_IP="${public_ip}"
+MARKER="/var/lib/wireguard-bootstrap.done"
+
+if [[ -f "$${MARKER}" ]]; then
+  echo "WireGuard bootstrap already completed, skipping."
+  exit 0
+fi
+
+echo "Starting WireGuard bootstrap for project $${PROJECT_ID}"
+
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -y
+apt-get install -y --no-install-recommends \
+  ca-certificates \
+  curl \
+  iptables \
+  iptables-persistent \
+  jq \
+  python3 \
+  wireguard-tools
+
+umask 077
+install -d -m 0700 /etc/wireguard/clients
+
+if [[ ! -s /etc/wireguard/server.key ]]; then
+  wg genkey > /etc/wireguard/server.key
+  wg pubkey < /etc/wireguard/server.key > /etc/wireguard/server.pub
+fi
+
+SERVER_PRIVATE_KEY="$(cat /etc/wireguard/server.key)"
+SERVER_PUBLIC_KEY="$(cat /etc/wireguard/server.pub)"
+DEFAULT_IFACE="$(ip route show default | awk '{print $5; exit}')"
+
+cat > /etc/sysctl.d/99-wireguard.conf <<EOF
+net.ipv4.ip_forward = 1
+EOF
+sysctl --system >/dev/null
+
+cat > /etc/wireguard/wg0.conf <<EOF
+[Interface]
+Address = $${VPN_SERVER_ADDRESS}/$${VPN_PREFIX_LENGTH}
+ListenPort = $${VPN_PORT}
+PrivateKey = $${SERVER_PRIVATE_KEY}
+PostUp = iptables -A FORWARD -i %i -j ACCEPT; iptables -A FORWARD -o %i -j ACCEPT; iptables -t nat -A POSTROUTING -o $${DEFAULT_IFACE} -j MASQUERADE
+PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -D FORWARD -o %i -j ACCEPT; iptables -t nat -D POSTROUTING -o $${DEFAULT_IFACE} -j MASQUERADE
+EOF
+chmod 600 /etc/wireguard/wg0.conf
+
+CLIENT_JSON='{}'
+CLIENT_INDEX=2
+
+for CLIENT_NAME in $${CLIENT_NAMES//,/ }; do
+  CLIENT_PRIVATE_KEY="$(wg genkey)"
+  CLIENT_PUBLIC_KEY="$(printf '%s\n' "$${CLIENT_PRIVATE_KEY}" | wg pubkey)"
+  CLIENT_ADDRESS="$(python3 - "$${VPN_SUBNET_CIDR}" "$${CLIENT_INDEX}" <<'PY'
+import ipaddress
+import sys
+
+network = ipaddress.ip_network(sys.argv[1])
+print(network.network_address + int(sys.argv[2]))
+PY
+)"
+
+  cat >> /etc/wireguard/wg0.conf <<EOF
+
+[Peer]
+# $${CLIENT_NAME}
+PublicKey = $${CLIENT_PUBLIC_KEY}
+AllowedIPs = $${CLIENT_ADDRESS}/32
+EOF
+
+  cat > "/etc/wireguard/clients/$${CLIENT_NAME}.conf" <<EOF
+[Interface]
+PrivateKey = $${CLIENT_PRIVATE_KEY}
+Address = $${CLIENT_ADDRESS}/32
+DNS = 1.1.1.1, 8.8.8.8
+
+[Peer]
+PublicKey = $${SERVER_PUBLIC_KEY}
+Endpoint = $${PUBLIC_IP}:$${VPN_PORT}
+AllowedIPs = 0.0.0.0/0
+PersistentKeepalive = 25
+EOF
+  chmod 600 "/etc/wireguard/clients/$${CLIENT_NAME}.conf"
+
+  CLIENT_JSON="$(jq -n \
+    --argjson accumulated "$${CLIENT_JSON}" \
+    --arg name "$${CLIENT_NAME}" \
+    --arg config "$(cat "/etc/wireguard/clients/$${CLIENT_NAME}.conf")" \
+    '$accumulated + {($name): $config}')"
+
+  CLIENT_INDEX=$((CLIENT_INDEX + 1))
+done
+
+systemctl enable wg-quick@wg0
+systemctl restart wg-quick@wg0
+netfilter-persistent save
+
+ACCESS_TOKEN="$(curl -sf -H 'Metadata-Flavor: Google' \
+  'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token' \
+  | jq -r '.access_token')"
+
+if [[ -z "$${ACCESS_TOKEN}" || "$${ACCESS_TOKEN}" == "null" ]]; then
+  echo "Unable to obtain a metadata access token." >&2
+  exit 1
+fi
+
+PAYLOAD="$(printf '%s' "$${CLIENT_JSON}" | base64 -w0)"
+UPLOAD_ATTEMPT=1
+
+while true; do
+  if curl -sf -X POST \
+    -H "Authorization: Bearer $${ACCESS_TOKEN}" \
+    -H "Content-Type: application/json" \
+    "https://secretmanager.googleapis.com/v1/projects/$${PROJECT_ID}/secrets/$${SECRET_NAME}:addVersion" \
+    -d "{\"payload\":{\"data\":\"$${PAYLOAD}\"}}" >/dev/null; then
+    echo "Client configuration uploaded to Secret Manager."
+    break
+  fi
+
+  if (( UPLOAD_ATTEMPT >= 5 )); then
+    echo "Failed to upload client configuration after $${UPLOAD_ATTEMPT} attempts." >&2
+    exit 1
+  fi
+
+  UPLOAD_ATTEMPT=$((UPLOAD_ATTEMPT + 1))
+  echo "Upload failed, retrying in 10 seconds (attempt $${UPLOAD_ATTEMPT})."
+  sleep 10
+done
+
+touch "$${MARKER}"
+echo "WireGuard bootstrap completed."

@@ -1,0 +1,16 @@
+.terraform/
+*.tfstate
+*.tfstate.*
+tfplan
+plan.json
+crash.log
+crash.*.log
+
+# Environment values may contain internal addresses; keep examples only.
+*.tfvars
+!*.tfvars.example
+backend.tf
+!backend.tf.example
+
+.env
+.DS_Store

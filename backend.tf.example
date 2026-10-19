@@ -1,0 +1,6 @@
+terraform {
+  backend "gcs" {
+    bucket = "replace-with-your-tfstate-bucket"
+    prefix = "gcp-wg-vpn/prod"
+  }
+}

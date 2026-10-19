@@ -1,0 +1,27 @@
+substitutions:
+  _TERRAFORM_IMAGE: "hashicorp/terraform:1.9.8"
+
+steps:
+  - id: fmt
+    name: "${_TERRAFORM_IMAGE}"
+    entrypoint: terraform
+    args: ["fmt", "-check", "-recursive"]
+
+  - id: init
+    name: "${_TERRAFORM_IMAGE}"
+    entrypoint: terraform
+    args: ["init", "-backend=false", "-input=false"]
+
+  - id: validate
+    name: "${_TERRAFORM_IMAGE}"
+    entrypoint: terraform
+    args: ["validate"]
+
+  - id: test
+    name: "${_TERRAFORM_IMAGE}"
+    entrypoint: terraform
+    args: ["test"]
+
+timeout: 1200s
+options:
+  logging: CLOUD_LOGGING_ONLY
