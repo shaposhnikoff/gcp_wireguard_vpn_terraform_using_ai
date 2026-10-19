@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 The current version lives in `VERSION` and is bumped by one patch for every
 merged pull request.
 
+## [0.0.8] - 2026-10-19
+
+### Changed
+
+- Add a direct link to the GitHub Pages documentation site at the top of the
+  README.
+
 ## [0.0.7] - 2026-10-19
 
 ### Added

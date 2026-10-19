@@ -5,6 +5,8 @@
 [![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-2ea44f?logo=github)](https://shaposhnikoff.github.io/gcp_wireguard_vpn_terraform_using_ai/)
 [![Terraform](https://img.shields.io/badge/terraform-%3E%3D1.9-7B42BC?logo=terraform)](https://developer.hashicorp.com/terraform)
 
+**Documentation:** https://shaposhnikoff.github.io/gcp_wireguard_vpn_terraform_using_ai/
+
 Terraform-модуль, который поднимает в GCP виртуальную машину с WireGuard и
 закрывает SSH доступом только с разрешённых CIDR. Проект собран как пример
 agentic-разработки: инфраструктура описывается кодом, а каждое изменение
