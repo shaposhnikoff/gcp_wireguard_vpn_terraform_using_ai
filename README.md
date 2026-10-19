@@ -137,6 +137,25 @@ output`.
 - `deletion_protection = true` по умолчанию.
 - Firewall flow logs и logging правил включены.
 
+## CI в GitHub Actions
+
+`.github/workflows/terraform.yml` запускается на каждый `pull_request`, на
+push в `main` и вручную через `workflow_dispatch`:
+
+| Job | Что делает |
+|---|---|
+| `fmt` | `terraform fmt -check -recursive -diff` |
+| `validate-and-test` | `init -backend=false`, `validate`, `terraform test` на Terraform 1.9.8 и 1.15.6 |
+| `tflint` | `tflint --init` + `tflint --recursive` с Google ruleset 0.40.0 |
+| `security` | Checkov, informational: `soft_fail: true` |
+
+GCP-креды и секреты не нужны: тесты используют `mock_provider`, `plan` и
+`apply` в CI не выполняются. Это осознанно: план требует реального проекта и
+ревью человеком.
+
+Чтобы сделать Checkov блокирующим, уберите `continue-on-error` и
+`soft_fail` после того, как разберёте текущие findings.
+
 ## Agentic workflow
 
 Пайплайн и правила работы агента описаны в

@@ -7,6 +7,7 @@
 - [x] Startup-шаблон WireGuard с генерацией клиентов и загрузкой в Secret Manager
 - [x] Native Terraform tests с mock_provider
 - [x] Makefile, verify/security скрипты, Cloud Build, README
+- [x] GitHub Actions: fmt, validate, terraform test matrix, tflint, Checkov
 - [x] Диаграмма потоков
 - [x] Прогнать `terraform fmt -check`, `init -backend=false`, `validate`, `test`
 - [x] Проверить шаблон через `bash -n` после рендера
@@ -34,6 +35,7 @@
 - `terraform validate` — pass.
 - `terraform test` — 4 passed, 0 failed.
 - Rendered startup script — `bash -n` pass.
-- `tflint`, `checkov`, `trivy`, `gitleaks` — не установлены локально, шаги
-  добавлены в `scripts/verify.sh` и `scripts/security.sh`.
+- `tflint` 0.55.0 + ruleset google 0.40.0 — 0 issues.
+- `checkov`, `trivy`, `gitleaks` — не установлены локально, шаги
+  добавлены в `scripts/verify.sh`, `scripts/security.sh` и CI.
 - `terraform plan` — не запускался: нет `terraform.tfvars` и доступа к проекту.
