@@ -263,6 +263,36 @@ make version-bump
 make verify
 ```
 
+## Релизы и теги
+
+Makefile использует тот же подход, что и в других репозиториях: последний тег
+берётся через `git describe --tags --abbrev=0`, а версия релиза — из `VERSION`.
+
+| Команда | Что делает |
+|---|---|
+| `make version` | Показывает последний tag и значение из `VERSION` |
+| `make tag` | Создаёт аннотированный тег `v$(VERSION)` и пушит его |
+| `make release` | То же плюс GitHub Release с notes из `CHANGELOG.md` |
+
+Требования к `make release`:
+
+- текущая ветка `main`, working tree чистый;
+- `main` совпадает с `origin/main`;
+- `gh` авторизован;
+- для `VERSION` есть секция в `CHANGELOG.md`;
+- тег ещё не существует.
+
+```bash
+make version
+make release
+# Pushed annotated tag v0.0.1.
+# https://github.com/.../releases/tag/v0.0.1
+```
+
+Скрипт `scripts/release.sh` идемпотентен по тегу: если тег уже запушен, но
+релиза нет, повторный `make release` создаст только GitHub Release. Если
+существует и тег, и релиз — команда завершится ошибкой.
+
 ## Checkov: блокирующая проверка и исключения
 
 `security` — обязательный job. Любая новая находка Checkov валит PR. Два

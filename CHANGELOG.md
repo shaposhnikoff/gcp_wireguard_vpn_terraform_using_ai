@@ -21,3 +21,5 @@ merged pull request.
   against the previous plan of the same pull request.
 - Pull-request-only workflow for `main` with required status checks.
 - Version and changelog enforcement in CI.
+- Makefile targets to inspect the latest tag, create annotated tags and publish
+  GitHub releases with notes taken from this changelog.
